@@ -1,0 +1,14 @@
+# Test environment files
+.venv
+build
+iot.egg-info
+
+# Local testing files
+backups
+test_data
+results
+test_script.py
+
+# Annoying for version control
+**/__pycache__
+

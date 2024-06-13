@@ -1,0 +1,55 @@
+# SETTINGS FILE FOR INTENSITY OVER TIME (IOT) ANALYSIS
+
+# File used to specify the settings to use when running the pipeline
+# Change parameters directly in this file 
+
+# Any line prefixed by a '#' is a comment and is ignored by the code
+# Keep ' = ' between parameter name and value (spaces matter)
+# Parameters are grouped by category to simplify finding those of interest
+# All parameters used during processing are saved in the generated log file
+
+
+# ROUGH SEGMENTATION ---------------------------------------------------------
+# The program performs an initial rough segmentation to find putative cells
+
+# Gamma adjustment (increase contrast to denoise the image):
+# - higher: low noise, risk border erosion and losing cells
+# - lower: higher noise, risk cell exclusion due to size increase 
+full_gamma_thr = 1.3
+
+# Small object thresholding (remove objects whose mask is below num pixels)
+# Depends on zoom and object size with respect to image size
+full_small_obj = 500
+
+# Radius of the mesh used to segment objects
+# Usually should not need to be changed
+full_water_foot_size = 10
+
+# Minimum size between distinct objects
+# Only consider objects distinct if they are at minimum at this distance
+# Depends on image size
+full_water_min_dist = 50
+
+# ----------------------------------------------------------------------------
+
+# CELL SEGMENTATION ----------------------------------------------------------
+# Refine rough masks to better fit cell/nuclear borders
+
+# How much of the original image to consider around the initial mask
+# Too low -> border sticking effect, too high -> slower runtime
+cell_blob_margin = 0.2
+
+# 
+cell_foot_frac = 0.1
+cell_water_foot_size = 10
+cell_water_min_dist = 20
+cell_hull_shift_frac = 1.1
+
+# ----------------------------------------------------------------------------
+
+# CELL QUALITY CHECKS --------------------------------------------------------
+
+cell_size_num_std = 2
+cell_movement_thr = 10
+
+# ----------------------------------------------------------------------------
