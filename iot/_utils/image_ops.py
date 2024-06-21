@@ -5,8 +5,9 @@ from typing import Iterable
 from matplotlib.colors import ListedColormap
 from matplotlib import colormaps as cm
 import numpy as np
+import pandas as pd
 import scipy as sp
-from skimage import feature, segmentation, morphology
+from skimage import feature, segmentation, morphology, measure
 
 
 def min_max_scale(img: np.ndarray) -> np.ndarray:
@@ -74,9 +75,9 @@ def blob_boundaries(
     shift = int(max(x_diff, y_diff) * tolerance)
 
     x_min = max(0, x_min - shift)
-    x_max = min(blob_mask.shape[0], x_max + shift)
+    x_max = min(blob_mask.shape[0], x_max + shift + 1)
     y_min = max(0, y_min - shift)
-    y_max = min(blob_mask.shape[1], y_max + shift)
+    y_max = min(blob_mask.shape[1], y_max + shift + 1)
 
     return (x_min, x_max, y_min, y_max)
 
@@ -101,7 +102,7 @@ def zoom_out(
     return zoomed_out
 
 
-def iterate_blobs(full_mask: np.ndarray) -> Iterable[np.ndarray]:
+def get_blobs(full_mask: np.ndarray) -> Iterable[np.ndarray]:
     """Iterate over the blobs returning their binary masks one at a time."""
 
     for label in range(1, full_mask.max() + 1):
@@ -111,7 +112,7 @@ def iterate_blobs(full_mask: np.ndarray) -> Iterable[np.ndarray]:
         if single_mask.sum() == 0:
             continue
 
-        yield single_mask
+        yield single_mask.astype(int)
 
 
 def get_outline(full_mask: np.ndarray) -> np.ndarray:
@@ -140,3 +141,12 @@ def add_outline(raw: np.ndarray, mask: np.ndarray, color: str) -> np.ndarray:
         overlay[overlap, ch] = outline[overlap, ch]
 
     return overlay
+
+
+def get_nuclei_info(
+    mask: np.ndarray, raw: np.ndarray, props: Iterable[str]
+) -> pd.DataFrame:
+    """Placeholder"""
+
+    label_props = measure.regionprops_table(mask, intensity_image=raw, properties=props)
+    return pd.DataFrame(label_props)

@@ -3,6 +3,9 @@
 build
 iot.egg-info
 
+# Text editor files
+.vscode
+
 # Local testing files
 backups
 test_data

@@ -4,7 +4,7 @@ import os
 
 import click
 
-from ..dynamics import DynamFull
+from .._core import Experiment
 from . import cli
 from ._utils import check_input, check_output, read_opts
 
@@ -53,7 +53,7 @@ def process(data, output, settings, force, debug):
     opts = read_opts(settings)
     opts["debug"] = debug
 
-    dyn = DynamFull(data, opts)
+    dyn = Experiment(data, opts)
     dyn.cell_info.to_csv(os.path.join(output, "cell_info.csv"), index=False)
     dyn.stn_ratios.to_csv(os.path.join(output, "stn_ratios.csv"), index=False)
     dyn.save_gifs(os.path.join(output, "gifs"), "outlined", 500)

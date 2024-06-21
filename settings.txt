@@ -15,7 +15,10 @@
 # Gamma adjustment (increase contrast to denoise the image):
 # - higher: low noise, risk border erosion and losing cells
 # - lower: higher noise, risk cell exclusion due to size increase 
-full_gamma_thr = 1.3
+
+gamma_init = 1.0
+gamma_step = 0.1
+gamma_max = 2.0
 
 # Small object thresholding (remove objects whose mask is below num pixels)
 # Depends on zoom and object size with respect to image size
@@ -43,13 +46,16 @@ cell_blob_margin = 0.2
 cell_foot_frac = 0.1
 cell_water_foot_size = 10
 cell_water_min_dist = 20
-cell_hull_shift_frac = 1.1
+cell_hull_shift_frac = 1
+cell_mask_fold_change = 1.5
 
 # ----------------------------------------------------------------------------
 
 # CELL QUALITY CHECKS --------------------------------------------------------
 
-cell_size_num_std = 2
-cell_movement_thr = 10
+cell_size_num_mads = 2
+cell_movement_thr = 50
+cell_match_frac = 0.01
+
 
 # ----------------------------------------------------------------------------

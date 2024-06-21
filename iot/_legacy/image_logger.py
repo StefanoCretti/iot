@@ -1,11 +1,18 @@
 """Placeholder"""
 
+from dataclasses import dataclass
 import os
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-from iot.base_classes import LabeledImage
+
+@dataclass
+class LabeledImage:
+    """Class to store an image with its corresponding label."""
+
+    label: str
+    image: np.ndarray
 
 
 class ImageLogger:
