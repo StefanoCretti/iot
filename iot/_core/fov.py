@@ -2,6 +2,7 @@
 
 import os
 import pathlib
+from typing import Iterable
 
 import numpy as np
 import pandas as pd
@@ -10,9 +11,13 @@ import PIL
 from .._utils import image_ops as imops
 from .._utils.io import TiffIterable
 from ..plotting import plot_frame
-from .frame import Frame
-from .nucleus import NucleiSeq
+
+from .pos_mask import masks_from_frame
+
+# from .frame import Frame
+from .nucleus import Nucleus
 from ._process_frame import process_frame  # TODO: move
+from .pos_mask import PosMask
 
 
 class Fov:
@@ -29,22 +34,25 @@ class Fov:
         Path to the .tiff file in string form.
     """
 
-    def __init__(self, tif_path: str, opts: dict, condition: str | None = None):
+    def __init__(self, tif_path: str, opts: dict):
 
         self._path: str = tif_path
-        self._frames: list[Frame] = self._load_frames(opts)
-        self._condition: str | None = condition
-        self._name: str = pathlib.Path(tif_path).name
+        self._nuclei: list["Nucleus"] = self._get_nuclei(opts)
 
     @property
     def name(self) -> str:
         """Placeholder"""
-        return self._name
+        return pathlib.Path(self._path).name
 
     @property
     def condition(self) -> str | None:
         """Placeholder"""
         return self._condition
+
+    @condition.setter
+    def condition(self, value: str | None) -> None:
+        """Placeholder"""
+        self._condition = value
 
     @property
     def path(self) -> str:
@@ -52,89 +60,93 @@ class Fov:
         return self._path
 
     @property
+    def num_frames(self) -> int:
+        """Placeholder"""
+        return len(TiffIterable(self._path))
+
+    @property
+    def shape(self) -> tuple[int, int]:
+        """Placeholder"""
+        return next(TiffIterable(self._path)).shape
+
+    @property
     def nuclei_info(self) -> pd.DataFrame:
         """Placeholder"""
 
-        datafs = [f.nuclei_info for f in self._frames]
-        datafs = [df.assign(frame=ind) for ind, df in enumerate(datafs)]
-        nuclei_dataf = pd.concat(datafs)
-        nuclei_dataf["file"] = os.path.basename(self._path)
-        nuclei_dataf["condition"] = self._condition
+        parts = [nucleus.info for nucleus in self._nuclei]
+        parts = [p.assign(frame=list(range(self.num_frames))) for p in parts]
+        infos = pd.concat(parts, ignore_index=True)
+        infos["file"] = self._path
+        infos["condition"] = self.condition
+        # infos["id"] = list(range(len(infos)))
 
-        return nuclei_dataf
+        return infos
 
     @property
     def stn_ratios(self) -> pd.DataFrame:
         """Placeholder"""
 
+        raw_frames = self.get_frames("raw")
+        mask_frames = self.get_frames("mask")
+
+        stns = []
+        for raw, mask in zip(raw_frames, mask_frames):
+            mean_signal = raw[mask].mean()
+            mean_noise = raw[~mask].mean()
+            stns.append(mean_signal / mean_noise)
+
         stn_dataf = pd.DataFrame()
-        stn_dataf["stn_ratio"] = [f.stn_ratio for f in self._frames]
-        stn_dataf["frame"] = range(len(self._frames))
-        stn_dataf["file"] = os.path.basename(self._path)
+        stn_dataf["stn_ratio"] = stns
+        stn_dataf["frame"] = [f + 1 for f in range(self.num_frames)]
+        stn_dataf["file"] = self._path
 
         return stn_dataf
 
-    def _load_frames(self, opts: dict) -> list[Frame]:
+    def _get_nuclei(self, opts: dict) -> list["Nucleus"]:
         """Placeholder"""
 
-        sequences = []
+        tiff_frames = TiffIterable(self._path)
+        first_frame = process_frame(next(tiff_frames), opts["gamma_init"], opts)
+        nuclei = [Nucleus(pm, self, i + 1) for i, pm in enumerate(first_frame)]
 
-        for num, raw in enumerate(TiffIterable(self._path)):
+        for ind, raw_frame in enumerate(tiff_frames):
+            print(f"Processing frame {ind + 1}/{self.num_frames}")
 
-            # TODO: Remove
-            print(f"Processing frame {num}")
+            frames_cache: dict[float, list["PosMask"]] = {}
 
-            # If it is the first frame, simply add the found nuclei to the list
-            if num == 0:
-                gamma_init = opts["gamma_init"]
-                frame = Frame(raw, process_frame(raw, gamma_init, opts))
-                sequences = [NucleiSeq(f, gamma_init) for f in frame.get_nuclei()]
-                continue
+            for nucleus in nuclei:
 
-            frames: dict[float, "Frame"] = {}
-            for i in reversed(range(len(sequences))):
-
-                seq = sequences[i]
                 gamma = opts["gamma_init"]
+                ref = nucleus.masks[-1]
 
                 while True:
 
                     # Get the frame processed with the correct parameters
                     # Compute it if missing, else fetch from the cache
-                    if gamma not in frames:
-                        frames[gamma] = Frame(raw, process_frame(raw, gamma, opts))
-                    frame = frames.get(gamma)
+                    if gamma not in frames_cache:
+                        frames_cache[gamma] = process_frame(raw_frame, gamma, opts)
+                    masks = frames_cache.get(gamma)
 
-                    if nuclei := frame.get_nuclei():
-                        success = seq.find_match(
-                            nuclei,
-                            opts["cell_movement_thr"],
-                            opts["cell_match_frac"],
-                        )
-                    else:
-                        break
+                    success = ref.best_match(
+                        masks, opts["cell_movement_thr"], opts["cell_match_frac"]
+                    )
 
                     if success:
-                        seq.add_nucleus(success, gamma)
+                        nucleus.add_mask(success)
                         break
 
                     gamma += opts["gamma_step"]
 
                     if gamma > opts["gamma_max"]:
-                        seq.add_nucleus(seq.last_nucleus, seq.last_gamma)
+                        nucleus.add_mask(ref)
                         break
 
-        nuclei_iterator = zip(*[seq.nuclei for seq in sequences])
-        frames = [
-            Frame.from_nuclei(raw, nuclei)
-            for raw, nuclei in zip(TiffIterable(self._path), nuclei_iterator)
-        ]
-        return frames
+        return nuclei
 
     def save_gif(self, path: str, modality: str, frame_duration: int) -> None:
         """Placeholder"""
 
-        frames = [f.get_image(modality) for f in self._frames]
+        frames = self.get_frames(modality)
         frames = np.stack([imops.to_pillow_range(a) for a in frames])
         images = [PIL.Image.fromarray(a_frame) for a_frame in frames]
         images[0].save(
@@ -148,6 +160,70 @@ class Fov:
         """Placeholder"""
 
         os.makedirs(folder, exist_ok=True)
-        for ind, frame in enumerate(self._frames):
-            img = frame.get_image(modality)
-            plot_frame(img, f"{folder}/frame_{ind}.png")
+        for ind, frame in enumerate(self.get_frames(modality)):
+            plot_frame(frame, f"{folder}/frame_{ind}.png")
+
+    #  @property
+    # def nuclei_info(self) -> pd.DataFrame:
+    #     """Information on the nuclei in frame as a pd.DataFrame."""
+
+    #     props = [
+    #         "label",
+    #         "area",
+    #         "centroid",
+    #         "intensity_max",
+    #         "intensity_mean",
+    #         "intensity_min",
+    #     ]
+
+    #     return imops.skimage_props(self._nuclei_mask, self._raw_frame, props)
+
+    # @property
+    # def stn_ratio(self) -> float:
+    #     """Return the signal-to-noise ratio of the frame.
+
+    #     The signal-to-noise ratio is computed as the ratio between the mean
+    #     pixel intensity within the mask (signal) and the mean pixel intensity
+    #     outside the mask (noise).
+    #     """
+
+    #     mask = self.get_image("mask").astype(bool)
+    #     mean_signal = self._raw_frame[mask].mean()
+    #     mean_noise = self._raw_frame[~mask].mean()
+
+    #     return mean_signal / mean_noise
+
+    def get_frames(self, modality: str) -> Iterable[np.ndarray]:
+        """Fetch the image according to the specified modality."""
+
+        match modality:
+            case "raw":
+                frames = tuple(TiffIterable(self._path))
+
+            case "labels":
+                frames = []
+                bounds = [0, 0, *self.shape]
+
+                for i in range(self.num_frames):
+
+                    mask = np.zeros(self.shape)
+                    for nucleus in self._nuclei:
+                        part = nucleus.masks[i].bbox_project(bounds)
+                        mask[part > 0] = nucleus.label
+
+                    frames.append(mask)
+
+            case "mask":
+                frames = self.get_frames("labels")
+                frames = [f > 0 for f in frames]
+
+            case "outlined":
+                color = "orange"
+                masks = self.get_frames("labels")
+                raws = self.get_frames("raw")
+                frames = [imops.add_outline(r, m, color) for r, m in zip(raws, masks)]
+
+            case _:
+                raise ValueError("Invalid modality")
+
+        return frames

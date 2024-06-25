@@ -9,10 +9,12 @@ from iot._utils import image_ops as imops
 # from iot.base_classes import LabeledImage
 # from iot.image_logger import ImageLogger
 from iot._core.nucleus import Nucleus
-from iot._core.frame import Frame
+from .pos_mask import masks_from_frame, PosMask
+
+from matplotlib import pyplot as plt
 
 
-def mad_discard(nuclei: list[Nucleus], attribute: str, num_mads: int):
+def mad_discard(nuclei: list["PosMask"], attribute: str, num_mads: int):
     """Discard nuclei with a statistic deviating too much from the median."""
 
     attr_list = [getattr(nucleus, attribute) for nucleus in nuclei]
@@ -33,21 +35,17 @@ def _refine_obj_mask(mask: np.ndarray, raw: np.ndarray, opts: dict) -> np.ndarra
 
     for num, blob in enumerate(imops.get_blobs(mask)):
 
-        # # img_log = ImageLogger("debug/single_nuclei")
         raw_img = raw.copy()
 
         # Restrict the raw signal to the object's boundaries
         bounds = imops.blob_boundaries(blob, opts["cell_blob_margin"])
         raw_img = imops.mono_to_color(imops.zoom_in(raw_img, bounds))
-        # # img_log.add_image(LabeledImage("Raw Signal", raw_img))
 
         # Restrict the mask to the object's boundaries
         blob = imops.zoom_in(blob, bounds)
-        # img_log.add_image(LabeledImage("Raw Mask", blob))
 
         # Fill holes in the putative nuclei
         blob = sp.ndimage.binary_fill_holes(blob)
-        # img_log.add_image(LabeledImage("Filled Holes", blob))
 
         # Create footer which is a fraction of the average between x and y sizes
         f_size = int(np.mean(blob.shape) * opts["cell_foot_frac"])
@@ -73,7 +71,6 @@ def _refine_obj_mask(mask: np.ndarray, raw: np.ndarray, opts: dict) -> np.ndarra
             opts["cell_water_min_dist"],
         )
         blobs = measure.label(blobs)
-        # img_log.add_image(LabeledImage("Blobs", blobs))
 
         # Try patching the opened mask with the blobs, keeping only those
         # which produce a minimal shift in the convex hull wrt their size
@@ -97,39 +94,24 @@ def _refine_obj_mask(mask: np.ndarray, raw: np.ndarray, opts: dict) -> np.ndarra
             if diff_hull < blob_size * opts["cell_hull_shift_frac"]:
                 with_blobs[diff_blob > 0] = 1
 
-        # img_log.add_image(LabeledImage("With Blobs", with_blobs))
-
         # Smoothen after adding the blobs
         with_blobs = morphology.binary_closing(with_blobs, footer)
-        # img_log.add_image(LabeledImage("Closed Blobs", with_blobs))
-
-        # Plot the segmented nucleus on the raw image
-        overlay = imops.add_outline(raw_img, with_blobs, "orange")
-        # img_log.add_image(LabeledImage("Overlay", overlay))
 
         # Add the mask to the refined masks
         mask = imops.zoom_out(with_blobs, bounds, mask)
         refined_mask[mask > 0] = num + 1
 
-        # if opts["debug"]:
-        # img_log.plot_images("group")
-        # img_log.clear_images()
-
     # Relabel the cells
     refined_mask = measure.label(refined_mask)
-
-    clean_frame = Frame(raw, refined_mask)
-    nuclei = clean_frame.get_nuclei()
+    nuclei = list(masks_from_frame(refined_mask))
 
     # TODO: Does not work great if cells have similar size?
-    mad_discard(nuclei, "size", opts["cell_size_num_mads"])
+    mad_discard(nuclei, "area", opts["cell_size_num_mads"])
 
-    clean_frame = Frame.from_nuclei(raw, nuclei)
-
-    return clean_frame.get_image("labels")
+    return nuclei
 
 
-def process_frame(frame: np.ndarray, gamma: float, opts: dict) -> np.ndarray:
+def process_frame(frame: np.ndarray, gamma: float, opts: dict) -> list["PosMask"]:
     """Segment the cell nuclei in the frame and create a mask."""
 
     print(f"Processing a frame with gamma {gamma}")
@@ -172,6 +154,6 @@ def process_frame(frame: np.ndarray, gamma: float, opts: dict) -> np.ndarray:
     # plt.imshow(mask)
     # plt.show()
 
-    mask = _refine_obj_mask(mask, frame, opts)
+    masks = _refine_obj_mask(mask, frame, opts)
 
-    return mask.astype(int)
+    return masks

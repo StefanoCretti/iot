@@ -52,7 +52,9 @@ class Experiment:
             condition = str(pathlib.Path(fov).relative_to(path).parents[0])
             condition = condition if condition != "." else None
 
-            fovs.append(Fov(fov, opts, condition))
+            new_fov = Fov(fov, opts)
+            new_fov.condition = condition
+            fovs.append(new_fov)
 
         self._data = data_folder
         self._fovs = fovs
@@ -68,7 +70,7 @@ class Experiment:
 
         nuclei_info = pd.concat([fov.nuclei_info for fov in self._fovs])
         nuclei_info.reset_index(drop=True, inplace=True)
-        nuclei_info["id"] = nuclei_info.groupby(["label", "file"]).ngroup()
+        # nuclei_info["id"] = range(len(nuclei_info))
 
         return nuclei_info
 
@@ -78,7 +80,7 @@ class Experiment:
 
         stn_ratios = pd.concat([fov.stn_ratios for fov in self._fovs])
         stn_ratios.reset_index(drop=True, inplace=True)
-        stn_ratios["id"] = stn_ratios.groupby(["file"]).ngroup()
+        # stn_ratios["id"] = stn_ratios.groupby(["file"]).ngroup()
 
         return stn_ratios
 

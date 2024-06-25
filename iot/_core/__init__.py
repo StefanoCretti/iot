@@ -11,5 +11,4 @@ This module is private and public objects are available in the main namespace.
 
 from .experiment import Experiment
 from .fov import Fov
-from .frame import Frame
 from .nucleus import Nucleus

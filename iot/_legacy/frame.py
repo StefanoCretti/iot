@@ -42,7 +42,7 @@ class Frame:
             "intensity_min",
         ]
 
-        return imops.get_nuclei_info(self._nuclei_mask, self._raw_frame, props)
+        return imops.skimage_props(self._nuclei_mask, self._raw_frame, props)
 
     @property
     def stn_ratio(self) -> float:

@@ -143,7 +143,7 @@ def add_outline(raw: np.ndarray, mask: np.ndarray, color: str) -> np.ndarray:
     return overlay
 
 
-def get_nuclei_info(
+def skimage_props(
     mask: np.ndarray, raw: np.ndarray, props: Iterable[str]
 ) -> pd.DataFrame:
     """Placeholder"""

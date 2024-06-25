@@ -1,3 +1,3 @@
 """Placeholder"""
 
-from ._core import Nucleus, Frame, Fov, Experiment
+from ._core import Nucleus, Fov, Experiment

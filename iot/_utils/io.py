@@ -28,3 +28,6 @@ class TiffIterable:
 
         self._tif_handle.close()
         raise StopIteration
+
+    def __len__(self) -> int:
+        return self._num_frames
