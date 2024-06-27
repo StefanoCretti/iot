@@ -1,4 +1,9 @@
-"""Placeholder"""
+"""Module for the Field of View (FOV) class.
+
+Implements the FOV class, used to handle a single field of view from a microscopy
+experiment (one .tiff file with multiple frames, one for each time point).
+The class provides methods to extract information from the FOV as a whole.
+"""
 
 import os
 import pathlib
@@ -7,18 +12,14 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 import PIL
+import tqdm
 
 from .._utils import image_ops as imops
 from .._utils.io import TiffIterable
 from ..plotting import plot_frame
-
-from .pos_mask import masks_from_frame
-
-# from .frame import Frame
+from ._process_frame import process_frame
 from .nucleus import Nucleus
-from ._process_frame import process_frame  # TODO: move
 from .pos_mask import PosMask
-from tqdm.auto import tqdm
 
 
 class Fov:
@@ -33,6 +34,11 @@ class Fov:
     ----------
     tif_path : str
         Path to the .tiff file in string form.
+    opts : dict
+        Dictionary with the options for the analysis.
+    pbar_pos : int, optional
+        Position of the progress bar in the terminal. Mostly used when loading
+         multiple Fov objects using multiprocessing. Default is 0.
     """
 
     def __init__(self, tif_path: str, opts: dict, pbar_pos: int = 0):
@@ -43,37 +49,43 @@ class Fov:
 
     @property
     def name(self) -> str:
-        """Placeholder"""
+        """Name of the FOV, extracted from the path."""
         return pathlib.Path(self._path).name
 
     @property
     def condition(self) -> str | None:
-        """Placeholder"""
+        """Condition of the FOV (by default subfolder name, if any)."""
         return self._condition
 
     @condition.setter
     def condition(self, value: str | None) -> None:
-        """Placeholder"""
+        """Overwrite the condition of the FOV.
+
+        Parameters
+        ----------
+        value : str
+            New condition for the FOV.
+        """
         self._condition = value
 
     @property
     def path(self) -> str:
-        """Placeholder"""
+        """Full path to the FOV file."""
         return self._path
 
     @property
     def num_frames(self) -> int:
-        """Placeholder"""
+        """Number of frames in the FOV."""
         return len(TiffIterable(self._path))
 
     @property
     def shape(self) -> tuple[int, int]:
-        """Placeholder"""
+        """Shape of the FOV frames."""
         return next(TiffIterable(self._path)).shape
 
     @property
     def nuclei_info(self) -> pd.DataFrame:
-        """Placeholder"""
+        """Tabular information about all nuclei in the FOV at each time point."""
 
         parts = [nucleus.info for nucleus in self._nuclei]
         parts = [p.assign(frame=list(range(self.num_frames))) for p in parts]
@@ -86,7 +98,11 @@ class Fov:
 
     @property
     def stn_ratios(self) -> pd.DataFrame:
-        """Placeholder"""
+        """Signal-to-noise ratios (STN) for the FOV at each time point.
+
+        The signal-to-noise ratio is computed as the ratio between the mean
+        signal in all masked object and the mean noise in the background.
+        """
 
         raw_frames = self.get_frames("raw")
         mask_frames = self.get_frames("mask")
@@ -105,13 +121,13 @@ class Fov:
         return stn_dataf
 
     def _get_nuclei(self, opts: dict) -> list["Nucleus"]:
-        """Placeholder"""
+        """Extract nuclei from the FOV using the specified options."""
 
         tiff_frames = TiffIterable(self._path)
         first_frame = process_frame(next(tiff_frames), opts["gamma_init"], opts)
         nuclei = [Nucleus(pm, self, i + 1) for i, pm in enumerate(first_frame)]
 
-        for raw_frame in tqdm(
+        for raw_frame in tqdm.tqdm(
             tiff_frames,
             total=self.num_frames,
             initial=1,
@@ -154,7 +170,18 @@ class Fov:
         return nuclei
 
     def save_gif(self, path: str, modality: str, frame_duration: int) -> None:
-        """Placeholder"""
+        """Save a gif with the frames of the FOV.
+
+        Parameters
+        ----------
+        path : str
+            Path to the output gif file.
+        modality : str
+            What to display in each frame of the gif. Can be "raw", "labels",
+            "mask", or "outlined".
+        frame_duration : int
+            Duration of each frame in the gif in milliseconds.
+        """
 
         frames = self.get_frames(modality)
         frames = np.stack([imops.to_pillow_range(a) for a in frames])
@@ -167,44 +194,41 @@ class Fov:
         )
 
     def save_frames(self, folder: str, modality: str) -> None:
-        """Placeholder"""
+        """Save individual frames of the FOV in a folder.
+
+        Parameters
+        ----------
+        folder : str
+            Path to the folder where the frames will be saved.
+        modality : str
+            What to display in each frame of the gif. Can be "raw", "labels",
+            "mask", or "outlined".
+        """
 
         os.makedirs(folder, exist_ok=True)
         for ind, frame in enumerate(self.get_frames(modality)):
             plot_frame(frame, f"{folder}/frame_{ind}.png")
 
-    #  @property
-    # def nuclei_info(self) -> pd.DataFrame:
-    #     """Information on the nuclei in frame as a pd.DataFrame."""
-
-    #     props = [
-    #         "label",
-    #         "area",
-    #         "centroid",
-    #         "intensity_max",
-    #         "intensity_mean",
-    #         "intensity_min",
-    #     ]
-
-    #     return imops.skimage_props(self._nuclei_mask, self._raw_frame, props)
-
-    # @property
-    # def stn_ratio(self) -> float:
-    #     """Return the signal-to-noise ratio of the frame.
-
-    #     The signal-to-noise ratio is computed as the ratio between the mean
-    #     pixel intensity within the mask (signal) and the mean pixel intensity
-    #     outside the mask (noise).
-    #     """
-
-    #     mask = self.get_image("mask").astype(bool)
-    #     mean_signal = self._raw_frame[mask].mean()
-    #     mean_noise = self._raw_frame[~mask].mean()
-
-    #     return mean_signal / mean_noise
-
     def get_frames(self, modality: str) -> Iterable[np.ndarray]:
-        """Fetch the image according to the specified modality."""
+        """Fetch the individual frames according to the specified modality.
+
+        Return an iterable of frames as numpy arrays. What is shown in each frame
+        depends on the modality selected. Available modalities are:
+        - "raw": raw signal.
+        - "labels": image with the labeled nuclei masks.
+        - "mask": binary image with the nuclei masks.
+        - "outlined": raw signal with the nuclei outlined in a given color.
+
+        Parameters
+        ----------
+        modality : str
+            Modality of the frames to return.
+
+        Returns
+        -------
+        Iterable[np.ndarray]
+            Iterable of frames as numpy arrays.
+        """
 
         match modality:
             case "raw":

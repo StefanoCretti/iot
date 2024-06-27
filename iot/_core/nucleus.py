@@ -1,9 +1,13 @@
-"""Placeholder."""
+"""Module for the Nucleus class and related functions.
+
+Implements a Nucleus class, used to study how the nucleus of a cell changes
+and behaves overtime. The class provides methods to extract information
+from the nucleus as an overtime dynamic.
+"""
 
 from typing import TYPE_CHECKING
 
 import pandas as pd
-
 
 from .._utils import image_ops as imops
 from .pos_mask import PosMask
@@ -11,14 +15,23 @@ from .pos_mask import PosMask
 if TYPE_CHECKING:
     from .fov import Fov
 
-# TODO: Remove these tmp imports for testing purposes
-import matplotlib.pyplot as plt
-from skimage import morphology
-from .._utils import image_ops as imops
-
 
 class Nucleus:
-    """Placeholder"""
+    """Class representing the nucleus of a cell in a field of view (FOV).
+
+    The nucleus is represented by a sequence of masks, one for each time point,
+    e.i. each frame in the FOV. The class provides methods to extract information
+    as an overtime dynamic of the nucleus.
+
+    Parameters
+    ----------
+    mask : PosMask
+        Mask of the nucleus at the first time point.
+    fov : Fov
+        Field of view where the nucleus is located.
+    label : int, optional
+        Label of the nucleus. Default is 1.
+    """
 
     def __init__(
         self,
@@ -52,21 +65,6 @@ class Nucleus:
         masks = [m.astype(int) for m in masks]  # TODO: Decide bool or int for masks
         props = [imops.skimage_props(m, r, prop) for m, r in zip(masks, raws)]
         return pd.concat(props, ignore_index=True)
-
-    # @property
-    # def mean_intensity(self) -> list[float]:
-    #     """Return the mean intensity of the nucleus overtime."""
-    #     return self._skimage_prop(["mean_intensity"])
-
-    # @property
-    # def max_intensity(self) -> list[float]:
-    #     """Return the max intensity of the nucleus overtime."""
-    #     return self._skimage_prop(["max_intensity"])
-
-    # @property
-    # def min_intensity(self) -> list[float]:
-    #     """Return the min intensity of the nucleus overtime."""
-    #     return self._skimage_prop(["min_intensity"])
 
     @property
     def masks(self) -> tuple["PosMask"]:

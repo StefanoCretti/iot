@@ -1,4 +1,4 @@
-"""Placeholder"""
+"""Procedure to process a single frame of the dynamic."""
 
 import numpy as np
 import scipy as sp
