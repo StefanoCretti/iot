@@ -1,5 +1,6 @@
 """Placeholder"""
 
+import multiprocessing
 import os
 import pathlib
 
@@ -39,22 +40,33 @@ class Experiment:
         Dictionary with the options for the analysis.
     """
 
-    def __init__(self, data_folder: str, opts: OptsDict):
+    def _create_fov(self, fov, path, opts, counter):
+
+        # If the file is placed in a folder, set the folder as condition
+        condition = str(pathlib.Path(fov).relative_to(path).parents[0])
+        condition = condition if condition != "." else None
+
+        new_fov = Fov(fov, opts, pbar_pos=counter)
+        new_fov.condition = condition
+        return new_fov
+
+    def __init__(
+        self,
+        data_folder: str,
+        opts: OptsDict,
+        cores: int | None = None,
+    ) -> None:
+        """Create FOVs in parallel using multiple processes."""
 
         path = pathlib.Path(data_folder)
         files = [str(file) for file in path.rglob("*") if file.is_file()]
+        args = [(files[i], path, opts, i) for i in range(len(files))]
+        cores = cores or os.cpu_count() - 2
 
-        fovs: list[Fov] = []
-        for num, fov in enumerate(files):
-            print(f"Loading fov {num + 1}/{len(files)}: {fov}")
-
-            # If the file is placed in a folder, set the folder as condition
-            condition = str(pathlib.Path(fov).relative_to(path).parents[0])
-            condition = condition if condition != "." else None
-
-            new_fov = Fov(fov, opts)
-            new_fov.condition = condition
-            fovs.append(new_fov)
+        print("Starting to load FOVs:")
+        with multiprocessing.Pool(cores) as p:
+            fovs = p.starmap(self._create_fov, args)
+        print("\nFinished loading FOVs.")  # tqdm does not add newline at the end
 
         self._data = data_folder
         self._fovs = fovs

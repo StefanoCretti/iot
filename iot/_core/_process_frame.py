@@ -4,14 +4,8 @@ import numpy as np
 import scipy as sp
 from skimage import filters, segmentation, morphology, measure, feature, exposure
 
-from iot._utils import image_ops as imops
-
-# from iot.base_classes import LabeledImage
-# from iot.image_logger import ImageLogger
-from iot._core.nucleus import Nucleus
+from .._utils import image_ops as imops
 from .pos_mask import masks_from_frame, PosMask
-
-from matplotlib import pyplot as plt
 
 
 def mad_discard(nuclei: list["PosMask"], attribute: str, num_mads: int):
@@ -114,8 +108,6 @@ def _refine_obj_mask(mask: np.ndarray, raw: np.ndarray, opts: dict) -> np.ndarra
 def process_frame(frame: np.ndarray, gamma: float, opts: dict) -> list["PosMask"]:
     """Segment the cell nuclei in the frame and create a mask."""
 
-    print(f"Processing a frame with gamma {gamma}")
-
     mask: np.ndarray = frame.copy()
 
     mask = exposure.adjust_gamma(mask, gamma)
@@ -148,11 +140,6 @@ def process_frame(frame: np.ndarray, gamma: float, opts: dict) -> list["PosMask"
     seeds_map, _ = sp.ndimage.label(seeds_map)
 
     mask = segmentation.watershed(seed_mask * -1, seeds_map, mask=mask)
-
-    # import matplotlib.pyplot as plt
-
-    # plt.imshow(mask)
-    # plt.show()
 
     masks = _refine_obj_mask(mask, frame, opts)
 

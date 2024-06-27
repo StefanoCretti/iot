@@ -18,6 +18,7 @@ from .pos_mask import masks_from_frame
 from .nucleus import Nucleus
 from ._process_frame import process_frame  # TODO: move
 from .pos_mask import PosMask
+from tqdm.auto import tqdm
 
 
 class Fov:
@@ -34,9 +35,10 @@ class Fov:
         Path to the .tiff file in string form.
     """
 
-    def __init__(self, tif_path: str, opts: dict):
+    def __init__(self, tif_path: str, opts: dict, pbar_pos: int = 0):
 
         self._path: str = tif_path
+        self._pbar_pos: int = pbar_pos
         self._nuclei: list["Nucleus"] = self._get_nuclei(opts)
 
     @property
@@ -109,8 +111,14 @@ class Fov:
         first_frame = process_frame(next(tiff_frames), opts["gamma_init"], opts)
         nuclei = [Nucleus(pm, self, i + 1) for i, pm in enumerate(first_frame)]
 
-        for ind, raw_frame in enumerate(tiff_frames):
-            print(f"Processing frame {ind + 1}/{self.num_frames}")
+        for raw_frame in tqdm(
+            tiff_frames,
+            total=self.num_frames,
+            initial=1,
+            desc=self.path,
+            position=self._pbar_pos,
+            leave=False,
+        ):
 
             frames_cache: dict[float, list["PosMask"]] = {}
 
@@ -125,11 +133,13 @@ class Fov:
                     # Compute it if missing, else fetch from the cache
                     if gamma not in frames_cache:
                         frames_cache[gamma] = process_frame(raw_frame, gamma, opts)
-                    masks = frames_cache.get(gamma)
+                        masks = frames_cache.get(gamma)
 
-                    success = ref.best_match(
-                        masks, opts["cell_movement_thr"], opts["cell_match_frac"]
-                    )
+                        success = ref.best_match(
+                            masks,
+                            opts["cell_movement_thr"],
+                            opts["cell_match_frac"],
+                        )
 
                     if success:
                         nucleus.add_mask(success)
